@@ -3,3 +3,7 @@
 .idea/
 .settings/
 target/
+.vscode/*
+.project
+.gitignore
+.factorypath
