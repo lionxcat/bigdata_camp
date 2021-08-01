@@ -30,6 +30,10 @@ public class App {
             // 获取HBase连接
             conn = getConnection();
 
+            System.out.println("重置表与命名空间...");
+            // 删除已经创建的表和命名空间，如果存在的话
+            resetTable(conn);
+
             System.out.println("创建表...");
             // 创建表
             table = createTable(conn);
@@ -51,6 +55,10 @@ public class App {
             System.out.println("读取从A到ZZZ之间的数据...");
             printTable(table, "A", "ZZZ");
 
+            // 获取某一学生id
+            String sid = getId(table, "Jerry");
+            System.out.println("Jerry's student id is: " + sid);
+
             System.out.println("Done!");
         } catch (Exception ex) {
             ex.printStackTrace();
@@ -66,6 +74,43 @@ public class App {
         }
     }
 
+    // 删除表和命名空间，方便多次跑创建命令前先删除掉
+    private static void resetTable(Connection conn) throws IOException {
+        Admin admin = null;
+        TableName table = TableName.valueOf(_tablename);
+        try {
+            admin = conn.getAdmin();
+            if (admin.tableExists(table)) {
+                // 等待表完成读写
+                admin.disableTable(table);
+                // 删除表
+                admin.deleteTable(table);
+                // 删除命名空间
+                admin.deleteNamespace(_namespace);
+            }
+        } finally {
+            if (admin != null) {
+                // 关闭
+                admin.close();
+            }
+        }
+
+    }
+
+    // 获取某个学生的id
+    private static String getId(Table table, String name) throws IOException {
+        // 创建查询请求，使用row key查询
+        Get get = new Get(Bytes.toBytes(name));
+        // 选取列族
+        get.addFamily(_cf_info);
+        // 请求结果
+        Result r = table.get(get);
+        // 取出列，默认取最新版本的值
+        byte[] sid = r.getValue(_cf_info, _cl_sid);
+        return Bytes.toString(sid);
+
+    }
+
     // 打印从from到to之间的数据
     private static void printTable(Table table, String from, String to) throws IOException {
         Scan scan = new Scan();
@@ -78,13 +123,15 @@ public class App {
         }
         // 设置客户端缓存行数
         scan.setCaching(10);
-        for (Result r : table.getScanner(scan)) {
+        ResultScanner scanner = table.getScanner(scan);
+        for (Result r : scanner) {
             for (Cell c : r.rawCells()) {
-                System.out.println("Rowkey : " + Bytes.toString(r.getRow()) + "   Familiy:Quilifier : "
-                        + Bytes.toString(CellUtil.cloneQualifier(c)) + "   Value : "
-                        + Bytes.toString(CellUtil.cloneValue(c)) + "   Timestamp : " + c.getTimestamp());
+                System.out.println("Rowkey : " + Bytes.toString(r.getRow()) + "\tFamiliy:Quilifier : "
+                        + Bytes.toString(CellUtil.cloneQualifier(c)) + "\tValue : "
+                        + Bytes.toString(CellUtil.cloneValue(c)) + "\tTimestamp : " + c.getTimestamp());
             }
         }
+        scanner.close();
     }
 
     // 添加info列族行数据
